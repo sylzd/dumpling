@@ -3,14 +3,16 @@ package export
 import (
 	"database/sql"
 	"fmt"
+
+	//"github.com/go-sql-driver/mysql"
 	"regexp"
 	"strings"
 	"text/template"
 
-	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/dumpling/v4/log"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-tools/pkg/utils"
+	_ "github.com/siddontang/go-mysql/mysql"
 )
 
 const (
@@ -87,14 +89,14 @@ func adjustConfig(conf *Config) error {
 
 	// Register TLS config
 	if len(conf.Security.CAPath) > 0 {
-		tlsConfig, err := utils.ToTLSConfig(conf.Security.CAPath, conf.Security.CertPath, conf.Security.KeyPath)
+		_, err := utils.ToTLSConfig(conf.Security.CAPath, conf.Security.CertPath, conf.Security.KeyPath)
 		if err != nil {
 			return err
 		}
-		err = mysql.RegisterTLSConfig("dumpling-tls-target", tlsConfig)
-		if err != nil {
-			return err
-		}
+		//err = mysql.RegisterTLSConfig("dumpling-tls-target", tlsConfig)
+		//if err != nil {
+		//	return err
+		//}
 	}
 
 	if conf.Rows != UnspecifiedSize {
