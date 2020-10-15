@@ -11,7 +11,6 @@ require (
 	github.com/golang/groupcache v0.0.0-20181024230925-c65c006176ff // indirect
 	github.com/gorilla/websocket v1.2.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway v1.14.3 // indirect
-	github.com/jmoiron/sqlx v1.2.0 // indirect
 	github.com/json-iterator/go v1.1.9 // indirect
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20200820035142-66eb5bf1d1cd
@@ -19,7 +18,6 @@ require (
 	github.com/pingcap/log v0.0.0-20200511115504-543df19646ad
 	github.com/pingcap/tidb-tools v4.0.5-0.20200817064459-ba61a7376547+incompatible
 	github.com/pkg/errors v0.9.1
-	github.com/siddontang/go-mysql v1.1.0
 	github.com/soheilhy/cmux v0.1.4
 	github.com/spf13/pflag v1.0.3
 	github.com/tikv/pd v1.1.0-beta.0.20200825070655-6b09f3acbb1f
