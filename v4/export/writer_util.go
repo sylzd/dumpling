@@ -6,10 +6,11 @@ import (
 	"database/sql"
 	_ "database/sql"
 	"fmt"
-	"github.com/lichunzhu/go-mysql/mysql"
 	"io"
 	"strings"
 	"sync"
+
+	"github.com/lichunzhu/go-mysql/mysql"
 
 	"go.uber.org/zap"
 
@@ -233,6 +234,7 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 	return wp.Error()
 }
 
+// 关键代码1： 这里用新client流程来读取和导出数据
 func WriteInsertNew(pCtx context.Context, tblIR TableDataIR, w storage.Writer, fileSizeLimit, statementSizeLimit uint64) error {
 	rows := tblIR.RowsNew()
 
@@ -326,7 +328,8 @@ func WriteInsertNew(pCtx context.Context, tblIR TableDataIR, w storage.Writer, f
 		}
 
 		//fmt.Printf("%s,%s,%s\n", val[0], val[1], val[2])
-		rows.FinishReading(value)
+		// 关键代码3： 这里注释了Buffer池，每次new新的Buffer
+		// rows.FinishReading(value)
 		//select {
 		//case <-ctx.Done():
 		//	return ctx.Err()
