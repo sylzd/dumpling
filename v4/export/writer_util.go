@@ -326,7 +326,7 @@ func WriteInsertNew(pCtx context.Context, tblIR TableDataIR, w storage.Writer, f
 		}
 
 		//fmt.Printf("%s,%s,%s\n", val[0], val[1], val[2])
-		rows.FinishReading(value)
+		//rows.FinishReading(value)
 		//select {
 		//case <-ctx.Done():
 		//	return ctx.Err()
