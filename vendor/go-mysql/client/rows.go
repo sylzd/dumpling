@@ -3,6 +3,7 @@ package client
 import (
 	"bytes"
 	"encoding/binary"
+
 	. "github.com/lichunzhu/go-mysql/mysql"
 	"github.com/lichunzhu/go-mysql/utils"
 	"github.com/pingcap/errors"
@@ -30,13 +31,12 @@ func OutputResultPut(data *OutputResult) {
 	}
 }
 
-
 type Rows struct {
 	*Conn
 	*Result
 	binary             bool
 	err                error
-	parseErr  	       chan error
+	parseErr           chan error
 	RawBytesBufferChan chan *bytes.Buffer
 	OutputValueChan    chan *OutputResult
 }
@@ -67,7 +67,7 @@ func (c *Rows) Start() error {
 
 	var data []byte
 	result := c.Result
-	defer func(){
+	defer func() {
 		close(c.RawBytesBufferChan)
 		//close(c.OutputValueChan)
 	}()
@@ -124,12 +124,12 @@ func (c *Rows) Start() error {
 
 func (c *Rows) KeepParsing() {
 	//fmt.Println("KeepParsing start:", time.Now())
-	defer func(){
+	defer func() {
 		close(c.OutputValueChan)
 	}()
 	var (
 		rowData RowData
-		err error
+		err     error
 	)
 	cnt := 0
 	for len(outputResultChan) < cap(outputResultChan) {
@@ -142,11 +142,12 @@ func (c *Rows) KeepParsing() {
 			continue
 		}
 		rowData = data.Bytes()
-		ores:= new(OutputResult)
+		// 关键代码2： 这里注释了OutputResultGet方法，每次新建Buffer
+		ores := new(OutputResult)
 		//ores := OutputResultGet()
 		ores.RawBytesBuf = data
 		if len(ores.FieldResultArr) < len(c.Result.Fields) {
-			cnt+=1
+			cnt += 1
 			ores.FieldResultArr = make([]FieldValue, len(c.Result.Fields))
 		}
 		ores.FieldResultArr, err = rowData.ParsePureText(c.Result.Fields, ores.FieldResultArr)
