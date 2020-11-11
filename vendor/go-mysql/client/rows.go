@@ -60,16 +60,11 @@ func (c *Conn) Query(command string, args ...interface{}) (*Rows, error) {
 }
 
 func (c *Rows) Start() error {
-	//fmt.Println("Start start:", time.Now())
-	//defer 	func(){
-	//	fmt.Println("Start end:", time.Now())
-	//}()
 
 	var data []byte
 	result := c.Result
 	defer func() {
 		close(c.RawBytesBufferChan)
-		//close(c.OutputValueChan)
 	}()
 	go c.KeepParsing()
 	for {
@@ -97,33 +92,15 @@ func (c *Rows) Start() error {
 		}
 		c.RawBytesBufferChan <- bf
 
-		//var rowData RowData
-		//
-		//rowData = bf.Bytes()
-		////ores := OutputResultGet()
-		//ores:= new(OutputResult)
-		//ores.RawBytesBuf = bf
-		//if len(ores.FieldResultArr) < len(c.Result.Fields) {
-		//	ores.FieldResultArr = make([]FieldValue, len(c.Result.Fields))
-		//}
-		//ores.FieldResultArr, err = rowData.ParsePureText(c.Result.Fields, ores.FieldResultArr)
-		//if err != nil {
-		//	c.parseErr <- errors.Trace(err)
-		//}
-		//
-		////fmt.Println("time :", time.Now())
-		////fmt.Println("ores :", ores.FieldResultArr)
-		//c.OutputValueChan <- ores
-		//select {
-		//case c.err = <-c.parseErr:
-		//	return c.err
-		//default:
-		//}
+		select {
+		case c.err = <-c.parseErr:
+			return c.err
+		default:
+		}
 	}
 }
 
 func (c *Rows) KeepParsing() {
-	//fmt.Println("KeepParsing start:", time.Now())
 	defer func() {
 		close(c.OutputValueChan)
 	}()
@@ -155,11 +132,8 @@ func (c *Rows) KeepParsing() {
 			c.parseErr <- errors.Trace(err)
 		}
 
-		//fmt.Println("time :", time.Now())
-		//fmt.Println("ores :", ores.FieldResultArr)
 		c.OutputValueChan <- ores
 	}
-	//fmt.Println("KeepParsing end:", time.Now())
 
 }
 

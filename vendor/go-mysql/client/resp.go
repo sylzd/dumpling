@@ -298,7 +298,7 @@ func (c *Conn) readRowsResultset(data []byte, binary bool) (*Rows, error) {
 		Conn:               c,
 		Result:             result,
 		RawBytesBufferChan: make(chan *bytes.Buffer, 8),
-		OutputValueChan:    make(chan *OutputResult, 8),
+		OutputValueChan:    make(chan *OutputResult, 500),
 		parseErr:           make(chan error, 8),
 	}
 
