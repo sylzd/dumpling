@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
+	"reflect"
 )
 
 var colTypeRowReceiverMap = map[string]func() RowReceiverStringer{}
@@ -113,6 +114,33 @@ func SQLTypeBytesMaker() RowReceiverStringer {
 
 func SQLTypeNumberMaker() RowReceiverStringer {
 	return &SQLTypeNumber{}
+}
+
+func MakeRowReceiverArr(colTypes []string) RowReceiverArr {
+	rowReceiverArr := make([]RowReceiverStringer, len(colTypes))
+	for i, colTp := range colTypes {
+		recMaker, ok := colTypeRowReceiverMap[colTp]
+		if !ok {
+			recMaker = SQLTypeStringMaker
+		}
+		rowReceiverArr[i] = recMaker()
+	}
+	return RowReceiverArr{
+		bound:     false,
+		receivers: rowReceiverArr,
+	}
+}
+
+func MakeRowReceiverClone(r *RowReceiverArr) RowReceiverArr {
+	rowReceiverArr := make([]RowReceiverStringer, len(r.receivers))
+	for i, v := range r.receivers {
+		ptr := reflect.New(reflect.TypeOf(v))
+		rowReceiverArr[i] = ptr.Elem().Interface().(RowReceiverStringer)
+	}
+	return RowReceiverArr{
+		bound:     false,
+		receivers: rowReceiverArr,
+	}
 }
 
 func MakeRowReceiver(colTypes []string) RowReceiverStringer {

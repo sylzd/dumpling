@@ -52,6 +52,20 @@ func decodeFromRows(rows *sql.Rows, args []interface{}, row RowReceiver) error {
 		rows.Close()
 		return withStack(err)
 	}
+	//for _,i :=range args{
+	//	//	switch i.(type) {
+	//	//	case *SQLTypeBytes:
+	//	//		fmt.Println("args:", string(i.(*SQLTypeBytes).RawBytes))
+	//	//	case *SQLTypeString:
+	//	//		fmt.Println("args:", string(i.(*SQLTypeString).RawBytes))
+	//	//	case  *sql.RawBytes:
+	//	//		fmt.Println("args:", string(*i.(*sql.RawBytes)))
+	//	//
+	//	//	default:
+	//	//		fmt.Println("args type :", reflect.TypeOf(i))
+	//	//
+	//	//	}
+	//	//}
 	return nil
 }
 

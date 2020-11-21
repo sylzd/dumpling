@@ -3,12 +3,13 @@ package export
 import (
 	"bytes"
 	"context"
+	_ "database/sql"
 	"fmt"
+	"go.uber.org/zap"
 	"io"
 	"strings"
 	"sync"
-
-	"go.uber.org/zap"
+	"time"
 
 	"github.com/pingcap/br/pkg/storage"
 
@@ -152,7 +153,6 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 
 	var (
 		insertStatementPrefix string
-		row                   = MakeRowReceiver(tblIR.ColumnTypes())
 		counter               = 0
 		escapeBackSlash       = tblIR.EscapeBackSlash()
 		err                   error
@@ -168,36 +168,66 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 			wrapBackTicks(escapeString(tblIR.TableName())))
 	}
 	insertStatementPrefixLen := uint64(len(insertStatementPrefix))
+	wp.currentStatementSize = 0
+	bf.WriteString(insertStatementPrefix)
+	wp.AddFileSize(insertStatementPrefixLen)
+	var wg1 sync.WaitGroup
+	wg1.Add(1)
+	var row = MakeRowReceiverArr(tblIR.ColumnTypes())
 
-	for fileRowIter.HasNext() {
-		wp.currentStatementSize = 0
-		bf.WriteString(insertStatementPrefix)
-		wp.AddFileSize(insertStatementPrefixLen)
+	rowsChan := make(chan *RowReceiverArr, 8)
 
-		for fileRowIter.HasNext() {
-			if err = fileRowIter.Decode(row); err != nil {
-				log.Error("scanning from sql.Row failed", zap.Error(err))
-				return err
-			}
+	go func() {
+		defer wg1.Done()
+		for i := range rowsChan {
 
 			lastBfSize := bf.Len()
-			row.WriteToBuffer(bf, escapeBackSlash)
-			counter += 1
+			//for _, ii := range i {
+			//	switch ii.(type) {
+			//	case *SQLTypeBytes:
+			//		fmt.Println("args type SQLTypeBytes: ", string(ii.(*SQLTypeBytes).RawBytes))
+			//	case *SQLTypeString:
+			//		fmt.Println("args type SQLTypeString:", string(ii.(*SQLTypeString).RawBytes))
+			//	//case  *sql.RawBytes:
+			//	//	fmt.Println("args:", string(*ii.(*sql.RawBytes)))
+			//
+			//	default:
+			//		fmt.Println("args type :", reflect.TypeOf(i))
+			//
+			//	}
+			//}
+
+			fmt.Println("in chan:", i.receivers)
+
+			//switch i.(type) {
+			//case RowReceiverArr:
+			//	i.(RowReceiverArr).WriteToBuffer(bf, escapeBackSlash)
+			//case RowReceiverStringer:
+			//	i.(RowReceiverStringer).WriteToBuffer(bf, escapeBackSlash)
+			//default:
+			//	fmt.Println("i.(type)")
+			//}
+
+			i.WriteToBuffer(bf, escapeBackSlash)
 			wp.AddFileSize(uint64(bf.Len()-lastBfSize) + 2) // 2 is for ",\n" and ";\n"
 
-			fileRowIter.Next()
 			shouldSwitch := wp.ShouldSwitchStatement()
 			if fileRowIter.HasNext() && !shouldSwitch {
 				bf.WriteString(",\n")
+			} else if (fileRowIter.HasNext() && shouldSwitch) || (len(rowsChan) > 0) {
+				bf.WriteString(";\n")
+				bf.WriteString(insertStatementPrefix)
+				wp.AddFileSize(insertStatementPrefixLen)
 			} else {
 				bf.WriteString(";\n")
 			}
 			if bf.Len() >= lengthLimit {
+				fmt.Println("bf:", bf)
 				select {
 				case <-pCtx.Done():
-					return pCtx.Err()
-				case err := <-wp.errCh:
-					return err
+					return
+				case _ = <-wp.errCh:
+					return
 				case wp.input <- bf:
 					bf = pool.Get().(*bytes.Buffer)
 					if bfCap := bf.Cap(); bfCap < lengthLimit {
@@ -205,15 +235,84 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 					}
 				}
 			}
+			//if shouldSwitch {
+			//
+			//}
 
-			if shouldSwitch {
-				break
-			}
 		}
+	}()
+
+	for fileRowIter.HasNext() {
+		//shouldSwitchChan := make(chan bool,1)
+		// 一直读数据
+
+		if err = fileRowIter.Decode(row); err != nil {
+			log.Error("scanning from sql.Row failed", zap.Error(err))
+			return err
+		}
+		fmt.Println("row:", row.receivers)
+		fmt.Println("chan length:", len(rowsChan))
+
+		rowsChan <- &row
+		time.Sleep(100 * time.Nanosecond)
+
+		//lastBfSize := bf.Len()
+		//row.WriteToBuffer(bf, escapeBackSlash)
+		//counter += 1
+		//wp.AddFileSize(uint64(bf.Len()-lastBfSize) + 2) // 2 is for ",\n" and ";\n"
+
+		fileRowIter.Next()
+		//LP:		for fileRowIter.HasNext() {
+		//			var row = MakeRowReceiver(tblIR.ColumnTypes())
+		//
+		//			if err = fileRowIter.Decode(row); err != nil {
+		//				log.Error("scanning from sql.Row failed", zap.Error(err))
+		//				return err
+		//			}
+		//			fmt.Println("row:",row)
+		//			fmt.Println("chan length:",len(rowsChan))
+		//			select {
+		//			case <-shouldSwitchChan:
+		//				fmt.Println("shouldSwitchChan:  111")
+		//				break LP
+		//			default:
+		//				rowsChan <-row
+		//			}
+		//
+		//			//lastBfSize := bf.Len()
+		//			//row.WriteToBuffer(bf, escapeBackSlash)
+		//			//counter += 1
+		//			//wp.AddFileSize(uint64(bf.Len()-lastBfSize) + 2) // 2 is for ",\n" and ";\n"
+		//
+		//			fileRowIter.Next()
+		//
+		//			//if bf.Len() >= lengthLimit {
+		//			//	select {
+		//			//	case <-pCtx.Done():
+		//			//		return pCtx.Err()
+		//			//	case err := <-wp.errCh:
+		//			//		return err
+		//			//	case wp.input <- bf:
+		//			//		bf = pool.Get().(*bytes.Buffer)
+		//			//		if bfCap := bf.Cap(); bfCap < lengthLimit {
+		//			//			bf.Grow(lengthLimit - bfCap)
+		//			//		}
+		//			//	}
+		//			//}
+		//
+		//
+		//		}
+
 		if wp.ShouldSwitchFile() {
 			break
 		}
 	}
+	fmt.Println("1211212+++++++++")
+
+	close(rowsChan)
+	fmt.Println("1211212")
+	wg1.Wait()
+
 	log.Debug("dumping table",
 		zap.String("table", tblIR.TableName()),
 		zap.Int("record counts", counter))
