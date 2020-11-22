@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -19,6 +20,7 @@ type rowIter struct {
 	rows    *sql.Rows
 	hasNext bool
 	args    []interface{}
+	lock    *sync.Mutex
 }
 
 func newRowIter(rows *sql.Rows, argLen int) *rowIter {

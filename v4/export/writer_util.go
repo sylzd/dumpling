@@ -5,11 +5,11 @@ import (
 	"context"
 	_ "database/sql"
 	"fmt"
-	"go.uber.org/zap"
 	"io"
 	"strings"
 	"sync"
-	"time"
+
+	"go.uber.org/zap"
 
 	"github.com/pingcap/br/pkg/storage"
 
@@ -29,6 +29,7 @@ type writerPipe struct {
 	input  chan *bytes.Buffer
 	closed chan struct{}
 	errCh  chan error
+	lock   *sync.Mutex
 
 	currentFileSize      uint64
 	currentStatementSize uint64
@@ -45,6 +46,7 @@ func newWriterPipe(w storage.Writer, fileSizeLimit, statementSizeLimit uint64) *
 		closed: make(chan struct{}),
 		errCh:  make(chan error, 1),
 		w:      w,
+		lock:   &sync.Mutex{},
 
 		currentFileSize:      0,
 		currentStatementSize: 0,
@@ -79,6 +81,8 @@ func (b *writerPipe) Run(ctx context.Context) {
 }
 
 func (b *writerPipe) AddFileSize(fileSize uint64) {
+	b.lock.Lock()
+	defer b.lock.Unlock()
 	b.currentFileSize += fileSize
 	b.currentStatementSize += fileSize
 }
@@ -93,6 +97,8 @@ func (b *writerPipe) Error() error {
 }
 
 func (b *writerPipe) ShouldSwitchFile() bool {
+	b.lock.Lock()
+	defer b.lock.Unlock()
 	return b.fileSizeLimit != UnspecifiedSize && b.currentFileSize >= b.fileSizeLimit
 }
 
@@ -173,15 +179,20 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 	wp.AddFileSize(insertStatementPrefixLen)
 	var wg1 sync.WaitGroup
 	wg1.Add(1)
-	var row = MakeRowReceiverArr(tblIR.ColumnTypes())
 
 	rowsChan := make(chan *RowReceiverArr, 8)
 
 	go func() {
 		defer wg1.Done()
-		for i := range rowsChan {
-
+		for {
+			i, ok := <-rowsChan
 			lastBfSize := bf.Len()
+			if !ok {
+				bf.Truncate(lastBfSize - 2)
+				bf.WriteString(";\n")
+				break
+			}
+
 			//for _, ii := range i {
 			//	switch ii.(type) {
 			//	case *SQLTypeBytes:
@@ -212,14 +223,13 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 			wp.AddFileSize(uint64(bf.Len()-lastBfSize) + 2) // 2 is for ",\n" and ";\n"
 
 			shouldSwitch := wp.ShouldSwitchStatement()
-			if fileRowIter.HasNext() && !shouldSwitch {
+			if !shouldSwitch {
 				bf.WriteString(",\n")
-			} else if (fileRowIter.HasNext() && shouldSwitch) || (len(rowsChan) > 0) {
+			} else if (shouldSwitch) || (len(rowsChan) > 0) {
 				bf.WriteString(";\n")
 				bf.WriteString(insertStatementPrefix)
 				wp.AddFileSize(insertStatementPrefixLen)
 			} else {
-				bf.WriteString(";\n")
 			}
 			if bf.Len() >= lengthLimit {
 				fmt.Println("bf:", bf)
@@ -245,6 +255,7 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 	for fileRowIter.HasNext() {
 		//shouldSwitchChan := make(chan bool,1)
 		// 一直读数据
+		row := MakeRowReceiverArr(tblIR.ColumnTypes())
 
 		if err = fileRowIter.Decode(row); err != nil {
 			log.Error("scanning from sql.Row failed", zap.Error(err))
@@ -254,7 +265,7 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 		fmt.Println("chan length:", len(rowsChan))
 
 		rowsChan <- &row
-		time.Sleep(100 * time.Nanosecond)
+		//time.Sleep(100 * time.Nanosecond)
 
 		//lastBfSize := bf.Len()
 		//row.WriteToBuffer(bf, escapeBackSlash)
