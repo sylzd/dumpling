@@ -7,6 +7,7 @@ require (
 	github.com/coreos/go-semver v0.3.0
 	github.com/docker/go-units v0.4.0
 	github.com/go-sql-driver/mysql v1.5.0
+	github.com/kr/pretty v0.1.0
 	github.com/pingcap/br v0.0.0-20200925095602-bf9cc603382e
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20200902104258-eba4f1d8f6de

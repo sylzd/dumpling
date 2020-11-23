@@ -19,6 +19,8 @@ build: bin/dumpling
 
 bin/%: cmd/%/main.go $(wildcard v4/**/*.go)
 	$(GO) build $(GOLDFLAGS) -tags codes -o $@ $<
+# 	GO111MODULE=on GOOS=linux $(GO) build $(GOLDFLAGS) -tags codes -o $@ $<
+# 	scp  bin/dumpling work@10.38.200.101:/home/work/opdir/ygc/dumpling_111
 
 test: failpoint-enable
 	$(GO) list ./... | xargs $(GO) test $(GOLDFLAGS) -coverprofile=coverage.txt -covermode=atomic  ||{ $(FAILPOINT_DISABLE); exit 1; }
