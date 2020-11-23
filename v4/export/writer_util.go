@@ -5,11 +5,13 @@ import (
 	"context"
 	_ "database/sql"
 	"fmt"
-	"github.com/pingcap/br/pkg/storage"
 	"go.uber.org/zap"
 	"io"
 	"strings"
 	"sync"
+	"time"
+
+	"github.com/pingcap/br/pkg/storage"
 
 	"github.com/pingcap/dumpling/v4/log"
 )
@@ -176,9 +178,15 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 
 	go func() {
 		defer wg1.Done()
-		for i := range rowsChan {
-
+		for {
+			i, ok := <-rowsChan
 			lastBfSize := bf.Len()
+			if !ok {
+				bf.Truncate(lastBfSize - 2)
+				bf.WriteString(";\n")
+				break
+			}
+
 			//for _, ii := range i {
 			//	switch ii.(type) {
 			//	case *SQLTypeBytes:
@@ -207,17 +215,16 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 
 			i.WriteToBuffer(bf, escapeBackSlash)
 			wp.AddFileSize(uint64(bf.Len()-lastBfSize) + 2) // 2 is for ",\n" and ";\n"
-			bf.WriteString(",\n")
-			//shouldSwitch := wp.ShouldSwitchStatement()
-			//if fileRowIter.HasNext() && !shouldSwitch {
-			//	bf.WriteString(",\n")
-			//} else if (fileRowIter.HasNext() && shouldSwitch) || (len(rowsChan) > 0) {
-			//	bf.WriteString(";\n")
-			//	bf.WriteString(insertStatementPrefix)
-			//	wp.AddFileSize(insertStatementPrefixLen)
-			//} else {
-			//	bf.WriteString(";\n")
-			//}
+
+			shouldSwitch := wp.ShouldSwitchStatement()
+			if !shouldSwitch {
+				bf.WriteString(",\n")
+			} else if (shouldSwitch) || (len(rowsChan) > 0) {
+				bf.WriteString(";\n")
+				bf.WriteString(insertStatementPrefix)
+				wp.AddFileSize(insertStatementPrefixLen)
+			} else {
+			}
 			if bf.Len() >= lengthLimit {
 				fmt.Println("bf:", bf)
 				select {
@@ -242,7 +249,7 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 	for fileRowIter.HasNext() {
 		//shouldSwitchChan := make(chan bool,1)
 		// 一直读数据
-		var row = MakeRowReceiverArr(tblIR.ColumnTypes())
+		row := MakeRowReceiverArr(tblIR.ColumnTypes())
 
 		if err = fileRowIter.Decode(row); err != nil {
 			log.Error("scanning from sql.Row failed", zap.Error(err))
@@ -251,7 +258,7 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 		fmt.Println("row:", row.receivers)
 		fmt.Println("chan length:", len(rowsChan))
 
-		rowsChan <- row
+		rowsChan <- &row
 		//time.Sleep(100 * time.Nanosecond)
 
 		//lastBfSize := bf.Len()
