@@ -22,6 +22,8 @@ func newSimpleRowReceiver(length int) *simpleRowReceiver {
 func (s *simpleRowReceiver) BindAddress(args []interface{}) {
 	for i := range args {
 		args[i] = &s.data[i]
+		//a := s.data[i]
+		//args[i] = &a
 	}
 }
 

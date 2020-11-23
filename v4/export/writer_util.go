@@ -9,7 +9,6 @@ import (
 	"io"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/pingcap/br/pkg/storage"
 
@@ -167,27 +166,29 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 		insertStatementPrefix = fmt.Sprintf("INSERT INTO %s VALUES\n",
 			wrapBackTicks(escapeString(tblIR.TableName())))
 	}
-	insertStatementPrefixLen := uint64(len(insertStatementPrefix))
+	fmt.Println(insertStatementPrefix)
+	//insertStatementPrefixLen := uint64(len(insertStatementPrefix))
 	wp.currentStatementSize = 0
-	bf.WriteString(insertStatementPrefix)
-	wp.AddFileSize(insertStatementPrefixLen)
+	//bf.WriteString(insertStatementPrefix)
+	//wp.AddFileSize(insertStatementPrefixLen)
 	var wg1 sync.WaitGroup
 	wg1.Add(1)
 
-	rowsChan := make(chan RowReceiverArr, 8)
+	rowsChan := make(chan *RowReceiverArr, 8)
+	//tmpLock := &sync.Mutex{}
 
 	go func() {
 		defer wg1.Done()
 		for {
 			i, ok := <-rowsChan
-			lastBfSize := bf.Len()
+			//lastBfSize := bf.Len()
 			if !ok {
-				bf.Truncate(lastBfSize - 2)
-				bf.WriteString(";\n")
+				//bf.Truncate(lastBfSize - 2)
+				//bf.WriteString(";\n")
 				break
 			}
 
-			//for _, ii := range i {
+			//for _, ii := range i.receivers {
 			//	switch ii.(type) {
 			//	case *SQLTypeBytes:
 			//		fmt.Println("args type SQLTypeBytes: ", string(ii.(*SQLTypeBytes).RawBytes))
@@ -212,19 +213,21 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 			//default:
 			//	fmt.Println("i.(type)")
 			//}
-
+			//tmpLock.Lock()
 			i.WriteToBuffer(bf, escapeBackSlash)
-			wp.AddFileSize(uint64(bf.Len()-lastBfSize) + 2) // 2 is for ",\n" and ";\n"
+			//tmpLock.Unlock()
+			//wp.AddFileSize(uint64(bf.Len()-lastBfSize) + 2) // 2 is for ",\n" and ";\n"
+			bf.WriteString(",\n")
 
-			shouldSwitch := wp.ShouldSwitchStatement()
-			if !shouldSwitch {
-				bf.WriteString(",\n")
-			} else if (shouldSwitch) || (len(rowsChan) > 0) {
-				bf.WriteString(";\n")
-				bf.WriteString(insertStatementPrefix)
-				wp.AddFileSize(insertStatementPrefixLen)
-			} else {
-			}
+			//shouldSwitch := wp.ShouldSwitchStatement()
+			//if !shouldSwitch {
+			//	bf.WriteString(",\n")
+			//} else if (shouldSwitch) || (len(rowsChan) > 0) {
+			//	bf.WriteString(";\n")
+			//	bf.WriteString(insertStatementPrefix)
+			//	wp.AddFileSize(insertStatementPrefixLen)
+			//} else {
+			//}
 			if bf.Len() >= lengthLimit {
 				fmt.Println("bf:", bf)
 				select {
@@ -245,28 +248,34 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 
 		}
 	}()
-
+	//row0 := MakeRowReceiverArr(tblIR.ColumnTypes())
 	for fileRowIter.HasNext() {
 		//shouldSwitchChan := make(chan bool,1)
 		// 一直读数据
-		row := MakeRowReceiverArr(tblIR.ColumnTypes())
+		row0 := MakeRowReceiverArr(tblIR.ColumnTypes())
 
-		if err = fileRowIter.Decode(row); err != nil {
+		//tmpLock.Lock()
+		if err = fileRowIter.Decode(row0); err != nil {
 			log.Error("scanning from sql.Row failed", zap.Error(err))
 			return err
 		}
-		fmt.Println("row:", row.receivers)
+		//tmpLock.Unlock()
+		fmt.Println("row0:", row0.receivers)
 		fmt.Println("chan length:", len(rowsChan))
-
+		row := MakeRowReceiverClone(tblIR.ColumnTypes(),&row0)
+		fmt.Println("row after:", row.receivers)
+		fmt.Println("row0 after:", row0.receivers)
 		rowsChan <- &row
+
 		//time.Sleep(100 * time.Nanosecond)
 
 		//lastBfSize := bf.Len()
 		//row.WriteToBuffer(bf, escapeBackSlash)
 		//counter += 1
 		//wp.AddFileSize(uint64(bf.Len()-lastBfSize) + 2) // 2 is for ",\n" and ";\n"
-
+		//tmpLock.Lock()
 		fileRowIter.Next()
+		//tmpLock.Unlock()
 		//LP:		for fileRowIter.HasNext() {
 		//			var row = MakeRowReceiver(tblIR.ColumnTypes())
 		//

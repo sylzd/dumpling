@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
+	_ "github.com/jinzhu/copier"
 	"reflect"
+
+	//"github.com/ulule/deepcopier"
 )
 
 var colTypeRowReceiverMap = map[string]func() RowReceiverStringer{}
@@ -131,11 +134,32 @@ func MakeRowReceiverArr(colTypes []string) RowReceiverArr {
 	}
 }
 
-func MakeRowReceiverClone(r *RowReceiverArr) RowReceiverArr {
+func MakeRowReceiverClone(colTypes []string, r *RowReceiverArr) RowReceiverArr {
 	rowReceiverArr := make([]RowReceiverStringer, len(r.receivers))
+	for i, colTp := range colTypes {
+		recMaker, ok := colTypeRowReceiverMap[colTp]
+		if !ok {
+			recMaker = SQLTypeStringMaker
+		}
+		rowReceiverArr[i] = recMaker()
+	}
+
 	for i, v := range r.receivers {
-		ptr := reflect.New(reflect.TypeOf(v))
-		rowReceiverArr[i] = ptr.Elem().Interface().(RowReceiverStringer)
+		//ptr := reflect.New(reflect.TypeOf(v))
+		//rowReceiverArr[i] = ptr.Elem().Interface().(RowReceiverStringer)
+		//a:=new(RowReceiverStringer)
+		// = *a
+		//copier.Copy(&rowReceiverArr[i], &r.receivers[i])
+		switch v.(type) {
+		case *SQLTypeString:
+			rowReceiverArr[i].(*SQLTypeString).Assign(v.(*SQLTypeString).RawBytes)
+		case *SQLTypeBytes:
+			rowReceiverArr[i].(*SQLTypeBytes).Assign(r.receivers[i].(*SQLTypeBytes).RawBytes)
+		case *SQLTypeNumber:
+			rowReceiverArr[i].(*SQLTypeNumber).Assign(r.receivers[i].(*SQLTypeNumber).RawBytes)
+		}
+		//deepcopier.Copy(v).To(rowReceiverArr[i])
+		//copy(rowReceiverArr[i], v)
 	}
 	return RowReceiverArr{
 		bound:     false,
@@ -169,6 +193,7 @@ func (r RowReceiverArr) BindAddress(args []interface{}) {
 	}
 	r.bound = true
 	for i := range args {
+		fmt.Println("r.receivers[i] type:",reflect.TypeOf(r.receivers[i]))
 		r.receivers[i].BindAddress(args[i : i+1])
 	}
 }
@@ -205,6 +230,16 @@ func (s SQLTypeNumber) WriteToBuffer(bf *bytes.Buffer, _ bool) {
 	}
 }
 
+func (s *SQLTypeNumber) Assign(sr sql.RawBytes) {
+	s.RawBytes = make(sql.RawBytes, len(sr))
+	copy(s.RawBytes, sr)
+	//arg[0] = new(sql.RawBytes)
+	//ss := make([]byte,len(s.RawBytes))
+	//copy(ss, s.RawBytes)
+	//arg[0] = &ss
+	fmt.Println(s.RawBytes)
+}
+
 func (s SQLTypeNumber) WriteToBufferInCsv(bf *bytes.Buffer, _ bool, opt *csvOption) {
 	if s.RawBytes != nil {
 		bf.Write(s.RawBytes)
@@ -219,6 +254,20 @@ type SQLTypeString struct {
 
 func (s *SQLTypeString) BindAddress(arg []interface{}) {
 	arg[0] = &s.RawBytes
+	//arg[0] = new(sql.RawBytes)
+	//ss := make([]byte,len(s.RawBytes))
+	//copy(ss, s.RawBytes)
+	//arg[0] = &ss
+}
+
+func (s *SQLTypeString) Assign(sr sql.RawBytes) {
+	s.RawBytes = make(sql.RawBytes, len(sr))
+
+	copy(s.RawBytes, sr)
+	//arg[0] = new(sql.RawBytes)
+	//ss := make([]byte,len(s.RawBytes))
+	//copy(ss, s.RawBytes)
+	//arg[0] = &ss
 }
 
 func (s *SQLTypeString) WriteToBuffer(bf *bytes.Buffer, escapeBackslash bool) {
@@ -247,6 +296,19 @@ type SQLTypeBytes struct {
 
 func (s *SQLTypeBytes) BindAddress(arg []interface{}) {
 	arg[0] = &s.RawBytes
+	//ss := make([]byte,len(s.RawBytes))
+	//ss := new(sql.RawBytes)
+	//copy(&ss, s.RawBytes)
+	//arg[0] = &ss
+}
+
+func (s *SQLTypeBytes) Assign(sr sql.RawBytes) {
+	s.RawBytes = make(sql.RawBytes, len(sr))
+	copy(s.RawBytes, sr)
+	//arg[0] = new(sql.RawBytes)
+	//ss := make([]byte,len(s.RawBytes))
+	//copy(ss, s.RawBytes)
+	//arg[0] = &ss
 }
 
 func (s *SQLTypeBytes) WriteToBuffer(bf *bytes.Buffer, _ bool) {
