@@ -5,10 +5,11 @@ import (
 	"context"
 	_ "database/sql"
 	"fmt"
-	"go.uber.org/zap"
 	"io"
 	"strings"
 	"sync"
+
+	"go.uber.org/zap"
 
 	"github.com/pingcap/br/pkg/storage"
 
@@ -177,6 +178,37 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 	rowsChan := make(chan *RowReceiverArr, 8)
 	//tmpLock := &sync.Mutex{}
 
+	colTypes := tblIR.ColumnTypes()
+	rowPool := sync.Pool{New: func() interface{} {
+		return MakeRowReceiverArr(colTypes)
+	}}
+
+	rowReceiverClone := func(colTypes []string, r *RowReceiverArr) RowReceiverArr {
+		rowReceiverArr := rowPool.Get().(RowReceiverArr).receivers
+
+		for i, v := range r.receivers {
+			//ptr := reflect.New(reflect.TypeOf(v))
+			//rowReceiverArr[i] = ptr.Elem().Interface().(RowReceiverStringer)
+			//a:=new(RowReceiverStringer)
+			// = *a
+			//copier.Copy(&rowReceiverArr[i], &r.receivers[i])
+			switch v.(type) {
+			case *SQLTypeString:
+				rowReceiverArr[i].(*SQLTypeString).Assign(v.(*SQLTypeString).RawBytes)
+			case *SQLTypeBytes:
+				rowReceiverArr[i].(*SQLTypeBytes).Assign(r.receivers[i].(*SQLTypeBytes).RawBytes)
+			case *SQLTypeNumber:
+				rowReceiverArr[i].(*SQLTypeNumber).Assign(r.receivers[i].(*SQLTypeNumber).RawBytes)
+			}
+			//deepcopier.Copy(v).To(rowReceiverArr[i])
+			//copy(rowReceiverArr[i], v)
+		}
+		return RowReceiverArr{
+			bound:     false,
+			receivers: rowReceiverArr,
+		}
+	}
+
 	go func() {
 		defer wg1.Done()
 		for {
@@ -248,11 +280,11 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 
 		}
 	}()
-	//row0 := MakeRowReceiverArr(tblIR.ColumnTypes())
+	row0 := MakeRowReceiverArr(tblIR.ColumnTypes())
 	for fileRowIter.HasNext() {
 		//shouldSwitchChan := make(chan bool,1)
 		// 一直读数据
-		row0 := MakeRowReceiverArr(tblIR.ColumnTypes())
+		//row0 := MakeRowReceiverArr(tblIR.ColumnTypes())
 
 		//tmpLock.Lock()
 		if err = fileRowIter.Decode(row0); err != nil {
@@ -262,7 +294,7 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 		//tmpLock.Unlock()
 		fmt.Println("row0:", row0.receivers)
 		fmt.Println("chan length:", len(rowsChan))
-		row := MakeRowReceiverClone(tblIR.ColumnTypes(),&row0)
+		row := rowReceiverClone(tblIR.ColumnTypes(), &row0)
 		fmt.Println("row after:", row.receivers)
 		fmt.Println("row0 after:", row0.receivers)
 		rowsChan <- &row

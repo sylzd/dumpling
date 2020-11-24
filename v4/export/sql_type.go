@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
-	_ "github.com/jinzhu/copier"
 	"reflect"
 
+	_ "github.com/jinzhu/copier"
 	//"github.com/ulule/deepcopier"
 )
 
@@ -135,14 +135,7 @@ func MakeRowReceiverArr(colTypes []string) RowReceiverArr {
 }
 
 func MakeRowReceiverClone(colTypes []string, r *RowReceiverArr) RowReceiverArr {
-	rowReceiverArr := make([]RowReceiverStringer, len(r.receivers))
-	for i, colTp := range colTypes {
-		recMaker, ok := colTypeRowReceiverMap[colTp]
-		if !ok {
-			recMaker = SQLTypeStringMaker
-		}
-		rowReceiverArr[i] = recMaker()
-	}
+	rowReceiverArr := MakeRowReceiverArr(colTypes).receivers
 
 	for i, v := range r.receivers {
 		//ptr := reflect.New(reflect.TypeOf(v))
@@ -193,7 +186,7 @@ func (r RowReceiverArr) BindAddress(args []interface{}) {
 	}
 	r.bound = true
 	for i := range args {
-		fmt.Println("r.receivers[i] type:",reflect.TypeOf(r.receivers[i]))
+		fmt.Println("r.receivers[i] type:", reflect.TypeOf(r.receivers[i]))
 		r.receivers[i].BindAddress(args[i : i+1])
 	}
 }
