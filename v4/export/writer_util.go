@@ -168,7 +168,7 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 			wrapBackTicks(escapeString(tblIR.TableName())))
 	}
 	fmt.Println(insertStatementPrefix)
-	//insertStatementPrefixLen := uint64(len(insertStatementPrefix))
+	insertStatementPrefixLen := uint64(len(insertStatementPrefix))
 	wp.currentStatementSize = 0
 	//bf.WriteString(insertStatementPrefix)
 	//wp.AddFileSize(insertStatementPrefixLen)
@@ -211,15 +211,21 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 
 	go func() {
 		defer wg1.Done()
+		isHead :=true
+
 		for {
 			i, ok := <-rowsChan
-			//lastBfSize := bf.Len()
+			lastBfSize := bf.Len()
 			if !ok {
 				//bf.Truncate(lastBfSize - 2)
 				//bf.WriteString(";\n")
 				break
 			}
-
+			if isHead{
+				bf.WriteString(insertStatementPrefix)
+				wp.AddFileSize(insertStatementPrefixLen)
+				isHead = false
+			}
 			//for _, ii := range i.receivers {
 			//	switch ii.(type) {
 			//	case *SQLTypeBytes:
@@ -248,7 +254,7 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 			//tmpLock.Lock()
 			i.WriteToBuffer(bf, escapeBackSlash)
 			//tmpLock.Unlock()
-			//wp.AddFileSize(uint64(bf.Len()-lastBfSize) + 2) // 2 is for ",\n" and ";\n"
+			wp.AddFileSize(uint64(bf.Len()-lastBfSize) + 2) // 2 is for ",\n" and ";\n"
 			bf.WriteString(",\n")
 
 			//shouldSwitch := wp.ShouldSwitchStatement()
@@ -260,8 +266,15 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 			//	wp.AddFileSize(insertStatementPrefixLen)
 			//} else {
 			//}
+			//if !shouldSwitch {
+			//	bf.WriteString(",\n")
+			//} else {
+			//	bf.WriteString(";\n")
+			//	isHead = true
+			//	continue
+			//}
+
 			if bf.Len() >= lengthLimit {
-				fmt.Println("bf:", bf)
 				select {
 				case <-pCtx.Done():
 					return
