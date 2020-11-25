@@ -230,7 +230,6 @@ func (s *SQLTypeNumber) Assign(sr sql.RawBytes) {
 	//ss := make([]byte,len(s.RawBytes))
 	//copy(ss, s.RawBytes)
 	//arg[0] = &ss
-	fmt.Println(s.RawBytes)
 }
 
 func (s SQLTypeNumber) WriteToBufferInCsv(bf *bytes.Buffer, _ bool, opt *csvOption) {
