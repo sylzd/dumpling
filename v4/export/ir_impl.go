@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -310,5 +311,8 @@ func (m *metaData) TargetName() string {
 }
 
 func (m *metaData) MetaSQL() string {
+	if !strings.HasSuffix(m.metaSQL, ";\n") {
+		m.metaSQL += ";\n"
+	}
 	return m.metaSQL
 }
