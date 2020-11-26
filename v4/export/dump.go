@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/lichunzhu/go-mysql/client"
+	_ "github.com/siddontang/go-mysql/client"
 	"github.com/pingcap/dumpling/v4/log"
 
 	_ "github.com/go-sql-driver/mysql"

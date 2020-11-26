@@ -6,7 +6,7 @@ import (
 	"database/sql"
 	_ "database/sql"
 	"fmt"
-	"github.com/lichunzhu/go-mysql/mysql"
+	"github.com/siddontang/go-mysql/mysql"
 	"io"
 	"strings"
 	"sync"
@@ -237,9 +237,10 @@ func WriteInsertNew(pCtx context.Context, tblIR TableDataIR, w storage.Writer, f
 	rows := tblIR.RowsNew()
 
 	val := make([]sql.RawBytes, len(rows.Fields))
+	ctxRow, _ := context.WithCancel(context.Background())
 	var err error
 	go func() {
-		err = rows.Start()
+		rows.Start(ctxRow)
 	}()
 
 	bf := pool.Get().(*bytes.Buffer)
@@ -270,9 +271,7 @@ func WriteInsertNew(pCtx context.Context, tblIR TableDataIR, w storage.Writer, f
 
 	var (
 		insertStatementPrefix string
-		//row                   = MakeRowReceiver(tblIR.ColumnTypes())
 		counter = 0
-		//escapeBackSlash       = tblIR.EscapeBackSlash()
 	)
 
 	selectedField := tblIR.SelectedField()
@@ -284,9 +283,18 @@ func WriteInsertNew(pCtx context.Context, tblIR TableDataIR, w storage.Writer, f
 		insertStatementPrefix = fmt.Sprintf("INSERT INTO %s VALUES\n",
 			wrapBackTicks(escapeString(tblIR.TableName())))
 	}
-	//insertStatementPrefixLen := uint64(len(insertStatementPrefix))
-	bf.WriteString(insertStatementPrefix)
-	for value := range rows.OutputValueChan {
+	insertStatementPrefixLen := uint64(len(insertStatementPrefix))
+
+	isHead :=true
+	for value := range rows.OutputValueChan{
+		if isHead {
+			wp.currentStatementSize =0
+			bf.WriteString(insertStatementPrefix)
+			wp.AddFileSize(insertStatementPrefixLen)
+			isHead = false
+		}
+		lastBfSize := bf.Len()
+
 		bf.WriteByte('(')
 		for i := range value.FieldResultArr {
 			val[i] = value.FieldResultArr[i].AsString()
@@ -306,83 +314,33 @@ func WriteInsertNew(pCtx context.Context, tblIR TableDataIR, w storage.Writer, f
 			}
 		}
 		bf.WriteByte(')')
-		if (wp.fileSizeLimit != UnspecifiedSize && wp.currentFileSize >= wp.fileSizeLimit) ||
-			(wp.statementSizeLimit != UnspecifiedSize && wp.currentStatementSize >= wp.statementSizeLimit) {
-			bf.WriteString(";\n")
-		} else {
+		wp.AddFileSize(uint64(bf.Len()-lastBfSize) + 2) // 2 is for ",\n" and ";\n"
+		shouldSwitch := wp.ShouldSwitchStatement()
+
+		if !shouldSwitch {
 			bf.WriteString(",\n")
+		}else{
+			bf.WriteString(";\n")
+			isHead = true
 		}
-		//nextFile := uint64(bf.Len())+wp.currentFileSize >= lengthLimit
-		//if nextFile || bf.Len() >= lengthLimit {
-		if bf.Len() >= lengthLimit {
+		if wp.ShouldSwitchFile() {
+			cancelRow()
+		}
+		if bf.Len() >= lengthLimit || uint64(bf.Len())+wp.currentFileSize >= lengthLimit{
 			wp.input <- bf
 			bf = pool.Get().(*bytes.Buffer)
 			if bfCap := bf.Cap(); bfCap < lengthLimit {
 				bf.Grow(lengthLimit - bfCap)
 			}
-			//if nextFile {
-			//	bf.WriteString(insertStatementPrefix)
-			//}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case err := <-wp.errCh:
+				return err
+			default:
+			}
 		}
-
-		//fmt.Printf("%s,%s,%s\n", val[0], val[1], val[2])
-		rows.FinishReading(value)
-		//select {
-		//case <-ctx.Done():
-		//	return ctx.Err()
-		//case err := <-wp.errCh:
-		//	return err
-		//default:
-		//}
 	}
-	// 修改
-	//for fileRowIter.HasNext() {
-	//	wp.currentStatementSize = 0
-	//	bf.WriteString(insertStatementPrefix)
-	//	wp.AddFileSize(insertStatementPrefixLen)
-	//
-	//	for fileRowIter.HasNext() {
-	//		if err = fileRowIter.Decode(row); err != nil {
-	//			log.Error("scanning from sql.Row failed", zap.Error(err))
-	//			return err
-	//		}
-	//
-	//		lastBfSize := bf.Len()
-	//		row.WriteToBuffer(bf, escapeBackSlash)
-	//		counter += 1
-	//		wp.AddFileSize(uint64(bf.Len()-lastBfSize) + 2) // 2 is for ",\n" and ";\n"
-	//
-	//		fileRowIter.Next()
-	//		shouldSwitch := wp.ShouldSwitchStatement()
-	//		if fileRowIter.HasNext() && !shouldSwitch {
-	//			bf.WriteString(",\n")
-	//		} else {
-	//			bf.WriteString(";\n")
-	//		}
-	//		if bf.Len() >= lengthLimit {
-	//			wp.input <- bf
-	//			bf = pool.Get().(*bytes.Buffer)
-	//			if bfCap := bf.Cap(); bfCap < lengthLimit {
-	//				bf.Grow(lengthLimit - bfCap)
-	//			}
-	//		}
-	//
-	//		select {
-	//		case <-pCtx.Done():
-	//			return pCtx.Err()
-	//		case err := <-wp.errCh:
-	//			return err
-	//		default:
-	//		}
-	//
-	//		if shouldSwitch {
-	//			break
-	//		}
-	//	}
-	//	if wp.ShouldSwitchFile() {
-	//		break
-	//	}
-	//}
 
 	log.Debug("dumping table",
 		zap.String("table", tblIR.TableName()),

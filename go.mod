@@ -9,7 +9,6 @@ require (
 	github.com/go-delve/delve v1.5.0 // indirect
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/google/go-dap v0.3.0 // indirect
-	github.com/lichunzhu/go-mysql v1.1.0
 	github.com/mattn/go-colorable v0.1.8 // indirect
 	github.com/peterh/liner v1.2.0 // indirect
 	github.com/pingcap/br v0.0.0-20200925095602-bf9cc603382e
@@ -37,4 +36,4 @@ require (
 	golang.org/x/tools v0.0.0-20200823205832-c024452afbcd // indirect
 )
 
-replace github.com/lichunzhu/go-mysql => ./vendor/go-mysql
+replace github.com/siddontang/go-mysql => github.com/sylzd/go-mysql

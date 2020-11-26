@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
-	"github.com/lichunzhu/go-mysql/client"
+	"github.com/siddontang/go-mysql/client"
 )
 
 // TableDataIR is table data intermediate representation.

@@ -9,8 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/lichunzhu/go-mysql/client"
-	//"github.com/lichunzhu/go-mysql/mysql"
+	"github.com/siddontang/go-mysql/client"
 	"github.com/pingcap/dumpling/v4/log"
 )
 
