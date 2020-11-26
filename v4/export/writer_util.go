@@ -16,7 +16,7 @@ import (
 	"github.com/pingcap/dumpling/v4/log"
 )
 
-const lengthLimit = 1048576
+const lengthLimit = 204800
 
 // TODO make this configurable, 5 mb is a good minimum size but on low latency/high bandwidth network you can go a lot bigger
 const hardcodedS3ChunkSize = 5 * 1024 * 1024
