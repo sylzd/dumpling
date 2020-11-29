@@ -25,6 +25,39 @@ var pool = sync.Pool{New: func() interface{} {
 	return &bytes.Buffer{}
 }}
 
+type bufferPool struct {
+	bp *sync.Pool
+}
+
+func newBufferPool(colTypes []string) *bufferPool {
+	return &bufferPool{
+		bp: &sync.Pool{
+			New: func() interface{} {
+				b := MakeRowReceiverArr(colTypes)
+				return b
+			},
+		},
+	}
+}
+
+func (bpool *bufferPool) Get() *RowReceiverArr {
+	return bpool.bp.Get().(*RowReceiverArr)
+}
+
+func (bpool *bufferPool) Put(rr *RowReceiverArr) {
+	//TODO1: 这里可能导致无法插入null值
+	for _, v := rr.receivers {
+	case *SQLTypeString:
+		v.(*SQLTypeString).RawBytes = v.(*SQLTypeString).RawBytes[:0]
+	case *SQLTypeBytes:
+		v.(*SQLTypeBytes).RawBytes = v.(*SQLTypeBytes).RawBytes[:0]
+	case *SQLTypeNumber:
+		v.(*SQLTypeNumber).RawBytes = v.(*SQLTypeNumber).RawBytes[:0]
+	}
+	}
+	bpool.bp.Put(rr)
+}
+
 type writerPipe struct {
 	input  chan *bytes.Buffer
 	closed chan struct{}
@@ -175,15 +208,17 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 		sync.Mutex
 		flag bool
 	}{flag: false}
-	rowsChan := make(chan *RowReceiverArr, 8)
+	rowsChan := make(chan *RowReceiverArr, 200)
 
 	colTypes := tblIR.ColumnTypes()
-	rowPool := sync.Pool{New: func() interface{} {
-		return MakeRowReceiverArr(colTypes)
-	}}
+	//rowPool := sync.Pool{New: func() interface{} {
+	//	return MakeRowReceiverArr(colTypes)
+	//}}
+	rowPool2 := newBufferPool(colTypes)
 
 	rowReceiverClone := func(colTypes []string, r *RowReceiverArr) *RowReceiverArr {
-		rowReceiverArr := rowPool.Get().(*RowReceiverArr).receivers
+		//rowReceiverArr := rowPool.Get().(*RowReceiverArr).receivers
+		rowReceiverArr := rowPool2.Get().receivers
 		//rowReceiverArr := MakeRowReceiverArr(colTypes).receivers
 
 		for i, v := range r.receivers {
@@ -202,7 +237,7 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 		}
 	}
 
-	go func(rowPool sync.Pool) {
+	go func() {
 		isHead := false
 		bf.WriteString(insertStatementPrefix)
 		wp.AddFileSize(insertStatementPrefixLen)
@@ -223,7 +258,7 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 			}
 			lastBfSize := bf.Len()
 			i.WriteToBuffer(bf, escapeBackSlash)
-			rowPool.Put(i)
+			rowPool2.Put(i)
 			wp.AddFileSize(uint64(bf.Len()-lastBfSize) + 2) // 2 is for ",\n" and ";\n"
 			shouldSwitch := wp.ShouldSwitchStatement()
 			if !shouldSwitch {
@@ -233,6 +268,7 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 				isHead = true
 			}
 			if wp.ShouldSwitchFile() {
+				// TODO2: 对于switch的判断，如果用读写并发方式，似乎无法保证读与写改判断的一致,文件可能会比预期多一些数据
 				shouldSwitchFile.Lock()
 				shouldSwitchFile.flag = true
 				shouldSwitchFile.Unlock()
@@ -253,7 +289,7 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 			}
 
 		}
-	}(rowPool)
+	}()
 	row0 := MakeRowReceiverArr(colTypes)
 	for fileRowIter.HasNext() {
 		if err = fileRowIter.Decode(row0); err != nil {
