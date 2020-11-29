@@ -52,7 +52,6 @@ func decodeFromRows(rows *sql.Rows, args []interface{}, row RowReceiver) error {
 		rows.Close()
 		return withStack(err)
 	}
-
 	return nil
 }
 
