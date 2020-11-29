@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
-	"reflect"
 
 	_ "github.com/jinzhu/copier"
 	//"github.com/ulule/deepcopier"
@@ -186,7 +185,6 @@ func (r RowReceiverArr) BindAddress(args []interface{}) {
 	}
 	r.bound = true
 	for i := range args {
-		fmt.Println("r.receivers[i] type:", reflect.TypeOf(r.receivers[i]))
 		r.receivers[i].BindAddress(args[i : i+1])
 	}
 }

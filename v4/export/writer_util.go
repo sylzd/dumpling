@@ -167,7 +167,6 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 		insertStatementPrefix = fmt.Sprintf("INSERT INTO %s VALUES\n",
 			wrapBackTicks(escapeString(tblIR.TableName())))
 	}
-	fmt.Println(insertStatementPrefix)
 	insertStatementPrefixLen := uint64(len(insertStatementPrefix))
 	wp.currentStatementSize = 0
 	//bf.WriteString(insertStatementPrefix)
@@ -177,7 +176,7 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 	shouldSwitchFile := struct {
 		sync.Mutex
 		flag bool
-	}{flag:false}
+	}{flag: false}
 	rowsChan := make(chan *RowReceiverArr, 8)
 	//tmpLock := &sync.Mutex{}
 
@@ -213,7 +212,7 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 	}
 
 	go func() {
-		isHead:=false
+		isHead := false
 		bf.WriteString(insertStatementPrefix)
 		wp.AddFileSize(insertStatementPrefixLen)
 		defer wg1.Done()
@@ -223,10 +222,10 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 			if !ok {
 				break
 			}
-			if isHead{
+			if isHead {
 				bf.WriteString(insertStatementPrefix)
 				wp.AddFileSize(insertStatementPrefixLen)
-				isHead=false
+				isHead = false
 			}
 			lastBfSize := bf.Len()
 
@@ -245,7 +244,6 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 			//	}
 			//}
 
-
 			//switch i.(type) {
 			//case RowReceiverArr:
 			//	i.(RowReceiverArr).WriteToBuffer(bf, escapeBackSlash)
@@ -260,15 +258,15 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 			wp.AddFileSize(uint64(bf.Len()-lastBfSize) + 2) // 2 is for ",\n" and ";\n"
 			//bf.WriteString(",\n")
 			shouldSwitch := wp.ShouldSwitchStatement()
-			if !shouldSwitch && len(rowsChan) > 0{
+			if !shouldSwitch {
 				bf.WriteString(",\n")
-			}else{
+			} else {
 				bf.WriteString(";\n")
-				isHead=true
+				isHead = true
 			}
 			if wp.ShouldSwitchFile() {
 				shouldSwitchFile.Lock()
-				shouldSwitchFile.flag=true
+				shouldSwitchFile.flag = true
 				shouldSwitchFile.Unlock()
 			}
 			//shouldSwitch := wp.ShouldSwitchStatement()
@@ -327,7 +325,7 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 		//wp.AddFileSize(uint64(bf.Len()-lastBfSize) + 2) // 2 is for ",\n" and ";\n"
 		//tmpLock.Lock()
 		shouldSwitchFile.Lock()
-		if shouldSwitchFile.flag{
+		if shouldSwitchFile.flag {
 			shouldSwitchFile.Unlock()
 			break
 		}
