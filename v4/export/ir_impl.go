@@ -28,7 +28,7 @@ func newRowIter(rows *sql.Rows, argLen int) *rowIter {
 		rows:    rows,
 		hasNext: false,
 		args:    make([]interface{}, argLen),
-		lock: &sync.Mutex{},
+		lock:    &sync.Mutex{},
 	}
 	r.hasNext = r.rows.Next()
 	return r
@@ -47,8 +47,8 @@ func (iter *rowIter) Error() error {
 }
 
 func (iter *rowIter) Next() {
-	iter.lock.Lock()
-	defer iter.lock.Unlock()
+	//iter.lock.Lock()
+	//defer iter.lock.Unlock()
 	iter.hasNext = iter.rows.Next()
 }
 

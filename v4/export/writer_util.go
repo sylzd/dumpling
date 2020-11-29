@@ -184,6 +184,7 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 
 	rowReceiverClone := func(colTypes []string, r *RowReceiverArr) *RowReceiverArr {
 		rowReceiverArr := rowPool.Get().(*RowReceiverArr).receivers
+		//rowReceiverArr := MakeRowReceiverArr(colTypes).receivers
 
 		for i, v := range r.receivers {
 			switch v.(type) {
@@ -201,7 +202,7 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 		}
 	}
 
-	go func() {
+	go func(rowPool sync.Pool) {
 		isHead := false
 		bf.WriteString(insertStatementPrefix)
 		wp.AddFileSize(insertStatementPrefixLen)
@@ -222,6 +223,7 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 			}
 			lastBfSize := bf.Len()
 			i.WriteToBuffer(bf, escapeBackSlash)
+			rowPool.Put(i)
 			wp.AddFileSize(uint64(bf.Len()-lastBfSize) + 2) // 2 is for ",\n" and ";\n"
 			shouldSwitch := wp.ShouldSwitchStatement()
 			if !shouldSwitch {
@@ -251,7 +253,7 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 			}
 
 		}
-	}()
+	}(rowPool)
 	row0 := MakeRowReceiverArr(colTypes)
 	for fileRowIter.HasNext() {
 		if err = fileRowIter.Decode(row0); err != nil {
