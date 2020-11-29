@@ -115,7 +115,7 @@ func SQLTypeNumberMaker() RowReceiverStringer {
 	return &SQLTypeNumber{}
 }
 
-func MakeRowReceiverArr(colTypes []string) RowReceiverArr {
+func MakeRowReceiverArr(colTypes []string) *RowReceiverArr {
 	rowReceiverArr := make([]RowReceiverStringer, len(colTypes))
 	for i, colTp := range colTypes {
 		recMaker, ok := colTypeRowReceiverMap[colTp]
@@ -124,26 +124,7 @@ func MakeRowReceiverArr(colTypes []string) RowReceiverArr {
 		}
 		rowReceiverArr[i] = recMaker()
 	}
-	return RowReceiverArr{
-		bound:     false,
-		receivers: rowReceiverArr,
-	}
-}
-
-func MakeRowReceiverClone(colTypes []string, r *RowReceiverArr) RowReceiverArr {
-	rowReceiverArr := MakeRowReceiverArr(colTypes).receivers
-
-	for i, v := range r.receivers {
-		switch v.(type) {
-		case *SQLTypeString:
-			rowReceiverArr[i].(*SQLTypeString).Assign(v.(*SQLTypeString).RawBytes)
-		case *SQLTypeBytes:
-			rowReceiverArr[i].(*SQLTypeBytes).Assign(r.receivers[i].(*SQLTypeBytes).RawBytes)
-		case *SQLTypeNumber:
-			rowReceiverArr[i].(*SQLTypeNumber).Assign(r.receivers[i].(*SQLTypeNumber).RawBytes)
-		}
-	}
-	return RowReceiverArr{
+	return &RowReceiverArr{
 		bound:     false,
 		receivers: rowReceiverArr,
 	}
