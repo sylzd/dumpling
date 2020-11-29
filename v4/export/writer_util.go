@@ -189,11 +189,6 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 		rowReceiverArr := rowPool.Get().(RowReceiverArr).receivers
 
 		for i, v := range r.receivers {
-			//ptr := reflect.New(reflect.TypeOf(v))
-			//rowReceiverArr[i] = ptr.Elem().Interface().(RowReceiverStringer)
-			//a:=new(RowReceiverStringer)
-			// = *a
-			//copier.Copy(&rowReceiverArr[i], &r.receivers[i])
 			switch v.(type) {
 			case *SQLTypeString:
 				rowReceiverArr[i].(*SQLTypeString).Assign(v.(*SQLTypeString).RawBytes)
@@ -202,8 +197,6 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 			case *SQLTypeNumber:
 				rowReceiverArr[i].(*SQLTypeNumber).Assign(r.receivers[i].(*SQLTypeNumber).RawBytes)
 			}
-			//deepcopier.Copy(v).To(rowReceiverArr[i])
-			//copy(rowReceiverArr[i], v)
 		}
 		return RowReceiverArr{
 			bound:     false,

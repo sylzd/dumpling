@@ -4,9 +4,6 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
-
-	_ "github.com/jinzhu/copier"
-	//"github.com/ulule/deepcopier"
 )
 
 var colTypeRowReceiverMap = map[string]func() RowReceiverStringer{}
