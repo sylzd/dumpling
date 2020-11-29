@@ -220,9 +220,12 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 		for {
 			i, ok := <-rowsChan
 			if !ok {
+				bf.Truncate(bf.Len() - 2)
+				bf.WriteString(";\n")
 				break
 			}
 			if isHead {
+				wp.currentStatementSize = 0
 				bf.WriteString(insertStatementPrefix)
 				wp.AddFileSize(insertStatementPrefixLen)
 				isHead = false
