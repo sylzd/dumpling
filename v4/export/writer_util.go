@@ -235,7 +235,7 @@ func WriteInsertNew(pCtx context.Context, tblIR TableDataIR, w storage.Writer, f
 	rows := tblIR.RowsNew()
 
 	val := make([]sql.RawBytes, len(rows.Fields))
-	ctxRow, _ := context.WithCancel(context.Background())
+	ctxRow, cancelRow := context.WithCancel(context.Background())
 	var err error
 	go func() {
 		rows.Start(ctxRow)
@@ -269,7 +269,7 @@ func WriteInsertNew(pCtx context.Context, tblIR TableDataIR, w storage.Writer, f
 
 	var (
 		insertStatementPrefix string
-		counter = 0
+		counter               = 0
 	)
 
 	selectedField := tblIR.SelectedField()
@@ -283,10 +283,10 @@ func WriteInsertNew(pCtx context.Context, tblIR TableDataIR, w storage.Writer, f
 	}
 	insertStatementPrefixLen := uint64(len(insertStatementPrefix))
 
-	isHead :=true
-	for value := range rows.OutputValueChan{
+	isHead := true
+	for value := range rows.OutputValueChan {
 		if isHead {
-			wp.currentStatementSize =0
+			wp.currentStatementSize = 0
 			bf.WriteString(insertStatementPrefix)
 			wp.AddFileSize(insertStatementPrefixLen)
 			isHead = false
@@ -317,14 +317,14 @@ func WriteInsertNew(pCtx context.Context, tblIR TableDataIR, w storage.Writer, f
 
 		if !shouldSwitch {
 			bf.WriteString(",\n")
-		}else{
+		} else {
 			bf.WriteString(";\n")
 			isHead = true
 		}
 		if wp.ShouldSwitchFile() {
 			cancelRow()
 		}
-		if bf.Len() >= lengthLimit || uint64(bf.Len())+wp.currentFileSize >= lengthLimit{
+		if bf.Len() >= lengthLimit || uint64(bf.Len())+wp.currentFileSize >= lengthLimit {
 			wp.input <- bf
 			bf = pool.Get().(*bytes.Buffer)
 			if bfCap := bf.Cap(); bfCap < lengthLimit {
