@@ -3,7 +3,10 @@ package export
 import (
 	"bytes"
 	"context"
+	"database/sql"
+	_ "database/sql"
 	"fmt"
+	"github.com/siddontang/go-mysql/mysql"
 	"io"
 	"strings"
 	"sync"
@@ -223,6 +226,132 @@ func WriteInsert(pCtx context.Context, tblIR TableDataIR, w storage.Writer, file
 	close(wp.input)
 	<-wp.closed
 	if err = fileRowIter.Error(); err != nil {
+		return err
+	}
+	return wp.Error()
+}
+
+func WriteInsertNew(pCtx context.Context, tblIR TableDataIR, w storage.Writer, fileSizeLimit, statementSizeLimit uint64) error {
+	rows := tblIR.RowsNew()
+
+	val := make([]sql.RawBytes, len(rows.Fields))
+	ctxRow, cancelRow := context.WithCancel(context.Background())
+	var err error
+	go func() {
+		rows.Start(ctxRow)
+	}()
+
+	bf := pool.Get().(*bytes.Buffer)
+	if bfCap := bf.Cap(); bfCap < lengthLimit {
+		bf.Grow(lengthLimit - bfCap)
+	}
+
+	wp := newWriterPipe(w, fileSizeLimit, statementSizeLimit)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		wp.Run(ctx)
+		wg.Done()
+	}()
+	defer func() {
+		cancel()
+		wg.Wait()
+	}()
+
+	specCmtIter := tblIR.SpecialComments()
+	for specCmtIter.HasNext() {
+		bf.WriteString(specCmtIter.Next())
+		bf.WriteByte('\n')
+	}
+	wp.currentFileSize += uint64(bf.Len())
+
+	var (
+		insertStatementPrefix string
+		counter               = 0
+	)
+
+	selectedField := tblIR.SelectedField()
+	// if has generated column
+	if selectedField != "" {
+		insertStatementPrefix = fmt.Sprintf("INSERT INTO %s %s VALUES\n",
+			wrapBackTicks(escapeString(tblIR.TableName())), selectedField)
+	} else {
+		insertStatementPrefix = fmt.Sprintf("INSERT INTO %s VALUES\n",
+			wrapBackTicks(escapeString(tblIR.TableName())))
+	}
+	insertStatementPrefixLen := uint64(len(insertStatementPrefix))
+
+	isHead := true
+	for value := range rows.OutputValueChan {
+		if isHead {
+			wp.currentStatementSize = 0
+			bf.WriteString(insertStatementPrefix)
+			wp.AddFileSize(insertStatementPrefixLen)
+			isHead = false
+		}
+		lastBfSize := bf.Len()
+
+		bf.WriteByte('(')
+		for i := range value.FieldResultArr {
+			val[i] = value.FieldResultArr[i].AsString()
+
+			if value.FieldResultArr[i].Type == mysql.FieldValueTypeNull {
+				bf.WriteString(nullValue)
+			} else if value.FieldResultArr[i].Type == mysql.FieldValueTypeString {
+				bf.Write(quotationMark)
+				escape(val[i], bf, nil)
+				bf.Write(quotationMark)
+			} else {
+				bf.Write(val[i])
+			}
+
+			if i != len(value.FieldResultArr)-1 {
+				bf.WriteByte(',')
+			}
+		}
+		bf.WriteByte(')')
+		wp.AddFileSize(uint64(bf.Len()-lastBfSize) + 2) // 2 is for ",\n" and ";\n"
+		shouldSwitch := wp.ShouldSwitchStatement()
+
+		if !shouldSwitch {
+			bf.WriteString(",\n")
+		} else {
+			bf.WriteString(";\n")
+			isHead = true
+		}
+		if wp.ShouldSwitchFile() {
+			cancelRow()
+		}
+		if bf.Len() >= lengthLimit || uint64(bf.Len())+wp.currentFileSize >= lengthLimit {
+			wp.input <- bf
+			bf = pool.Get().(*bytes.Buffer)
+			if bfCap := bf.Cap(); bfCap < lengthLimit {
+				bf.Grow(lengthLimit - bfCap)
+			}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case err := <-wp.errCh:
+				return err
+			default:
+			}
+		}
+	}
+
+	log.Debug("dumping table",
+		zap.String("table", tblIR.TableName()),
+		zap.Int("record counts", counter))
+	if bf.Len() > 0 {
+		wp.input <- bf
+	}
+	close(wp.input)
+	<-wp.closed
+	//if err = fileRowIter.Error(); err != nil {
+	//	return err
+	//}
+	if err != nil {
 		return err
 	}
 	return wp.Error()

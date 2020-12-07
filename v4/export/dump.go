@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	_ "github.com/siddontang/go-mysql/client"
 	"github.com/pingcap/dumpling/v4/log"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -205,12 +206,17 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 	switch strings.ToLower(conf.FileType) {
 	case "sql":
 		writer = SQLWriter{SimpleWriter: simpleWriter}
-	case "csv":
-		writer = CSVWriter{SimpleWriter: simpleWriter}
+		//case "csv":
+		//	writer = CSVWriter{SimpleWriter: simpleWriter}
 	}
 
+	connectPoolNew, err := newConnectionsPoolNew(ctx, conf.Threads, conf)
+	if err != nil {
+		return err
+	}
+	defer connectPoolNew.Close()
 	if conf.Sql == "" {
-		if err = dumpDatabases(ctx, conf, connectPool, writer); err != nil {
+		if err = dumpDatabases(ctx, conf, connectPool, connectPoolNew, writer); err != nil {
 			return err
 		}
 	} else {
@@ -223,7 +229,7 @@ func Dump(pCtx context.Context, conf *Config) (err error) {
 	return nil
 }
 
-func dumpDatabases(ctx context.Context, conf *Config, connectPool *connectionsPool, writer Writer) error {
+func dumpDatabases(ctx context.Context, conf *Config, connectPool *connectionsPool, connectPoolNew *connectionsPoolNew, writer Writer) error {
 	allTables := conf.Tables
 	var g errgroup.Group
 	for dbName, tables := range allTables {
@@ -251,13 +257,13 @@ func dumpDatabases(ctx context.Context, conf *Config, connectPool *connectionsPo
 			for _, tableIR := range tableDataIRArray {
 				tableIR := tableIR
 				g.Go(func() error {
-					conn := connectPool.getConn()
-					defer connectPool.releaseConn(conn)
-					err := tableIR.Start(ctx, conn)
+					connNew := connectPoolNew.getConn()
+					defer connectPoolNew.releaseConn(connNew)
+					err := tableIR.StartNew(ctx, connNew)
 					if err != nil {
 						return err
 					}
-					return writer.WriteTableData(ctx, tableIR)
+					return writer.WriteTableDataNew(ctx, tableIR)
 				})
 			}
 		}

@@ -10,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/siddontang/go-mysql/client"
 	"github.com/pingcap/dumpling/v4/log"
 )
 
@@ -77,12 +78,14 @@ func (m *stringIter) HasNext() bool {
 }
 
 type tableData struct {
-	database        string
-	table           string
-	query           string
-	chunkIndex      int
-	rows            *sql.Rows
-	colTypes        []*sql.ColumnType
+	database   string
+	table      string
+	query      string
+	chunkIndex int
+	rows       *sql.Rows
+	rowsNew    *client.Rows
+	colTypes   []*sql.ColumnType
+	//colTypesNew        []*mysql.FieldValueType
 	selectedField   string
 	specCmts        []string
 	escapeBackslash bool
@@ -98,6 +101,16 @@ func (td *tableData) Start(ctx context.Context, conn *sql.Conn) error {
 	return nil
 }
 
+func (td *tableData) StartNew(ctx context.Context, conn *client.Conn) error {
+	//rows, err := conn.QueryContext(ctx, td.query)
+	rows, err := conn.Query(td.query)
+	if err != nil {
+		return err
+	}
+	td.rowsNew = rows
+	return nil
+}
+
 func (td *tableData) ColumnTypes() []string {
 	colTypes := make([]string, len(td.colTypes))
 	for i, ct := range td.colTypes {
@@ -106,11 +119,19 @@ func (td *tableData) ColumnTypes() []string {
 	return colTypes
 }
 
+func (td *tableData) ColumnTypesNew() []string {
+	colTypes := make([]string, len(td.colTypes))
+	//for i, ct := range td.colTypes {
+	//	colTypes[i] = ct.DatabaseTypeName()
+	//}
+	return colTypes
+}
+
 func (td *tableData) ColumnNames() []string {
 	colNames := make([]string, len(td.colTypes))
-	for i, ct := range td.colTypes {
-		colNames[i] = ct.Name()
-	}
+	//for i, ct := range td.colTypes {
+	//	colNames[i] = ct.Name()
+	//}
 	return colNames
 }
 
@@ -135,6 +156,10 @@ func (td *tableData) Rows() SQLRowIter {
 		td.SQLRowIter = newRowIter(td.rows, len(td.colTypes))
 	}
 	return td.SQLRowIter
+}
+
+func (td *tableData) RowsNew() *client.Rows {
+	return td.rowsNew
 }
 
 func (td *tableData) SelectedField() string {
